@@ -88,18 +88,18 @@ while True:
                 if is_hand_open:
                     target_freq1 = MIN_FREQ + (1 - center_y) * (MAX_FREQ - MIN_FREQ)
                     is_playing1 = True
-                    cv2.putText(img, f'Hand 1 Open: {distance:.2f}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    # cv2.putText(img, f'Hand 1 Open: {distance:.2f}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                 else:
                     is_playing1 = False
-                    cv2.putText(img, f'Hand 1 Closed: {distance:.2f}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    # cv2.putText(img, f'Hand 1 Closed: {distance:.2f}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
             elif i == 1: 
                 if is_hand_open:
                     target_freq2 = MIN_FREQ + (1 - center_y) * (MAX_FREQ - MIN_FREQ)
                     is_playing2 = True
-                    cv2.putText(img, f'Hand 2 Open: {distance:.2f}', (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    # cv2.putText(img, f'Hand 2 Open: {distance:.2f}', (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                 else:
                     is_playing2 = False
-                    cv2.putText(img, f'Hand 2 Closed: {distance:.2f}', (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    # cv2.putText(img, f'Hand 2 Closed: {distance:.2f}', (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
     else:
         is_playing1 = False
         is_playing2 = False

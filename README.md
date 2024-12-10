@@ -1,4 +1,4 @@
-# Gesture-Based Instrument
+# Gesture-Based Musical Instrument
 
 This project uses a webcam to detect hand gestures and control sound frequencies using the `pyo` library. The project leverages OpenCV for video capture and MediaPipe for hand tracking.
 
