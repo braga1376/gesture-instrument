@@ -4,6 +4,12 @@ import time
 import numpy as np
 import threading
 from pyo import *
+import argparse
+
+# Parse command-line arguments
+parser = argparse.ArgumentParser(description="Gesture-based instrument with optional lip-controlled LowPass filter.")
+parser.add_argument('--lip_control', action='store_true', help="Enable lip-controlled LowPass filter")
+args = parser.parse_args()
 
 INDEX_FINGER_IDX = 8
 THUMB_IDX = 4
@@ -32,7 +38,6 @@ C_MAJOR_SCALE_DICT = {
     "261.63": "C4",
     "246.94": "B3"
 }
-
 
 current_freq1 = C_MAJOR_SCALE[0]
 target_freq1 = C_MAJOR_SCALE[0]
@@ -95,7 +100,6 @@ hands = handSolution.Hands()
 faceLandmarker = mp.solutions.face_mesh
 face = faceLandmarker.FaceMesh()
 
-
 def get_closest_scale_freq(center_y):
     # Map the center_y value to the closest note in the C major scale
     num_notes = len(C_MAJOR_SCALE)
@@ -109,13 +113,22 @@ while True:
         break
 
     img = cv2.flip(img, 1)
+    h, w, c = img.shape
+
+    # Draw lines for each note
+    num_notes = len(C_MAJOR_SCALE)
+    for i in range(num_notes):
+        y = int(i * h / num_notes)
+        overlay = img.copy()
+        cv2.line(overlay, (0, y), (w, y), (255, 255, 255), 2)
+        alpha = 0.3
+        cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, img)
             
     recHands = hands.process(img)
     recFace = face.process(img)
     if recHands.multi_hand_landmarks:
         for i, hand in enumerate(recHands.multi_hand_landmarks):
             for datapoint_id, point in enumerate(hand.landmark):
-                h, w, c = img.shape
                 x, y = int(point.x * w), int(point.y * h)
                 cv2.circle(img, (x, y), 10, (255, 0, 255), cv2.FILLED)
             
@@ -149,10 +162,19 @@ while True:
                     cv2.putText(img, f'Hand 2 Closed: {distance:.2f}', (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                     cv2.putText(img, f'Note: {C_MAJOR_SCALE_DICT["{:.2f}".format(target_freq2)]}', (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
         
-        if recFace.multi_face_landmarks:
+        selected_note_index1 = C_MAJOR_SCALE.index(target_freq1)
+        selected_note_index2 = C_MAJOR_SCALE.index(target_freq2)
+        y1 = int(selected_note_index1 * h / num_notes)
+        y2 = int(selected_note_index2 * h / num_notes)
+        overlay = img.copy()
+        cv2.rectangle(overlay, (0, y1), (w, y1 + int(h / num_notes)), (0, 255, 0), -1)
+        cv2.rectangle(overlay, (0, y2), (w, y2 + int(h / num_notes)), (0, 255, 0), -1)
+        alpha = 0.1
+        cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, img)
+
+        if args.lip_control and recFace.multi_face_landmarks:
             for face_landmark in recFace.multi_face_landmarks:
                 for i, landmark in enumerate(face_landmark.landmark):
-                    h, w, c = img.shape
                     x, y = int(landmark.x * w), int(landmark.y * h)
                     cv2.circle(img, (x, y), 3, (0, 255, 0), cv2.FILLED)
 
@@ -162,7 +184,7 @@ while True:
 
             lip_distance = np.linalg.norm(np.array([upper_lip.x, upper_lip.y]) - np.array([lower_lip.x, lower_lip.y]))
 
-            lpfreq = 400 + lip_distance * 13000 
+            lpfreq = 0 + lip_distance * 17000 
             
             cv2.putText(img, f'Lip Distance: {lip_distance:.2f}', (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
             cv2.putText(img, f'LP Freq: {lpfreq:.2f}', (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
