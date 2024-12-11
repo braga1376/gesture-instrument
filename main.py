@@ -42,14 +42,17 @@ current_freq2 = C_MAJOR_SCALE[0]
 target_freq2 = C_MAJOR_SCALE[0]
 is_playing2 = False
 
+current_lpfreq = 1000
+lpfreq = 1000
+
 s = Server().boot()
 s.start()
 
 fm1 = FM(carrier=current_freq1, ratio=[4, 2, 1, 0.5], index=5, mul=0.5).out()
 fm2 = FM(carrier=current_freq2, ratio=[4, 2, 1, 0.5], index=5, mul=0.5).out()
 
-lp1 = ButLP(fm1, freq=1000).out()
-lp2 = ButLP(fm2, freq=1000).out()
+lp1 = ButLP(fm1, freq=current_lpfreq).out()
+lp2 = ButLP(fm2, freq=current_lpfreq).out()
 
 reverb1 = Freeverb(lp1, size=0.8, damp=0.5, bal=0.5).out()
 reverb2 = Freeverb(lp2, size=0.8, damp=0.5, bal=0.5).out()
@@ -57,6 +60,7 @@ reverb2 = Freeverb(lp2, size=0.8, damp=0.5, bal=0.5).out()
 def update_frequency():
     global current_freq1, target_freq1, is_playing1
     global current_freq2, target_freq2, is_playing2
+    global current_lpfreq, lpfreq
     while True:
         if is_playing1:
             current_freq1 = float(target_freq1)
@@ -74,6 +78,10 @@ def update_frequency():
         else:
             fm2.stop()
 
+        current_lpfreq = float(lpfreq)
+        lp1.freq = current_lpfreq
+        lp2.freq = current_lpfreq
+
         time.sleep(0.005) 
 
 freq_thread = threading.Thread(target=update_frequency)
@@ -83,6 +91,10 @@ freq_thread.start()
 cap = cv2.VideoCapture(0)
 handSolution = mp.solutions.hands
 hands = handSolution.Hands()
+
+faceLandmarker = mp.solutions.face_mesh
+face = faceLandmarker.FaceMesh()
+
 
 def get_closest_scale_freq(center_y):
     # Map the center_y value to the closest note in the C major scale
@@ -99,6 +111,7 @@ while True:
     img = cv2.flip(img, 1)
             
     recHands = hands.process(img)
+    recFace = face.process(img)
     if recHands.multi_hand_landmarks:
         for i, hand in enumerate(recHands.multi_hand_landmarks):
             for datapoint_id, point in enumerate(hand.landmark):
@@ -135,6 +148,25 @@ while True:
                     is_playing2 = False
                     cv2.putText(img, f'Hand 2 Closed: {distance:.2f}', (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                     cv2.putText(img, f'Note: {C_MAJOR_SCALE_DICT["{:.2f}".format(target_freq2)]}', (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        
+        if recFace.multi_face_landmarks:
+            for face_landmark in recFace.multi_face_landmarks:
+                for i, landmark in enumerate(face_landmark.landmark):
+                    h, w, c = img.shape
+                    x, y = int(landmark.x * w), int(landmark.y * h)
+                    cv2.circle(img, (x, y), 3, (0, 255, 0), cv2.FILLED)
+
+         
+            upper_lip = face_landmark.landmark[13] 
+            lower_lip = face_landmark.landmark[14]
+
+            lip_distance = np.linalg.norm(np.array([upper_lip.x, upper_lip.y]) - np.array([lower_lip.x, lower_lip.y]))
+
+            lpfreq = 400 + lip_distance * 13000 
+            
+            cv2.putText(img, f'Lip Distance: {lip_distance:.2f}', (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            cv2.putText(img, f'LP Freq: {lpfreq:.2f}', (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
 
     else:
         is_playing1 = False
