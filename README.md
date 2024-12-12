@@ -1,6 +1,6 @@
 # Gesture-Based Musical Instrument
 
-This project uses a webcam to detect hand gestures and control sound frequencies using the `pyo` library. The project leverages OpenCV for video capture and MediaPipe for hand tracking.
+This project uses a webcam to detect hand gestures and control sound frequencies. The project uses pyo for sound, OpenCV for video capture and MediaPipe for hand tracking.
 
 ## Requirements
 
@@ -48,6 +48,24 @@ This project uses a webcam to detect hand gestures and control sound frequencies
 
 - `update_frequency()`: Updates the sound frequency based on hand gestures.
 - `INDEX_FINGER_IDX`, `THUMB_IDX`: Indices for the thumb and index finger landmarks.
-- `MIN_FREQ`, `MAX_FREQ`: Minimum and maximum frequencies for the sound.
 - `current_freq1`, `target_freq1`, `is_playing1`: Variables for the first hand's frequency and play state.
 - `current_freq2`, `target_freq2`, `is_playing2`: Variables for the second hand's frequency and play state.
+- `current_lpfreq`, `lpfreq`: Variables for the LowPass filter frequency.
+- `get_closest_scale_freq(center_y)`: Maps the vertical position of the hand to the closest note in the C major scale.
+
+### Additional Features
+
+- **Lip-Controlled LowPass Filter**: Optionally control the LowPass filter frequency based on the distance between the upper and lower lips. Enable this feature with the `--lip_control` command-line argument.
+    ```sh
+    python main.py --lip_control
+    ```
+
+### Command-Line Arguments
+
+- `--lip_control`: Enable lip-controlled LowPass filter.
+
+## Acknowledgements
+
+- [OpenCV](https://opencv.org/)
+- [MediaPipe](https://mediapipe.dev/)
+- [pyo](http://ajaxsoundstudio.com/software/pyo/)
