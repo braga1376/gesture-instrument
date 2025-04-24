@@ -1,203 +1,167 @@
 import cv2
 import mediapipe as mp
-import time
-import numpy as np
 import threading
-from pyo import *
 import argparse
+from hand_tracking import HandTracker
+from face_tracking import FaceTracker
+from sound import SoundManager
 
-# Parse command-line arguments
-parser = argparse.ArgumentParser(description="Gesture-based instrument with optional lip-controlled LowPass filter.")
-parser.add_argument('--lip_control', action='store_true', help="Enable lip-controlled LowPass filter")
-args = parser.parse_args()
 
-INDEX_FINGER_IDX = 8
-THUMB_IDX = 4
+def main():
+    parser = argparse.ArgumentParser(description="Gesture-based instrument with optional lip-controlled LowPass filter.")
+    parser.add_argument('--lip_control', action='store_true', help="Enable lip-controlled LowPass filter")
+    args = parser.parse_args()
 
-C_MAJOR_SCALE = [
-    1046.50, 987.77, 880.00, 783.99, 698.46, 659.25, 587.33,  # C6 to B5
-    523.25, 493.88, 440.00, 392.00, 349.23, 329.63, 293.66,   # C5 to B4
-    261.63, 246.94  # C4 to B3
-]
+    sound_manager = SoundManager()
+    sound_manager.init_sound()
 
-C_MAJOR_SCALE_DICT = {
-    "1046.50": "C6",
-    "987.77": "B5",
-    "880.00": "A5",
-    "783.99": "G5",
-    "698.46": "F5",
-    "659.25": "E5",
-    "587.33": "D5",
-    "523.25": "C5",
-    "493.88": "B4",
-    "440.00": "A4",
-    "392.00": "G4",
-    "349.23": "F4",
-    "329.63": "E4",
-    "293.66": "D4",
-    "261.63": "C4",
-    "246.94": "B3"
-}
+    freq_thread = threading.Thread(target=sound_manager.update_frequency)
+    freq_thread.daemon = True
+    freq_thread.start()
 
-current_freq1 = C_MAJOR_SCALE[0]
-target_freq1 = C_MAJOR_SCALE[0]
-is_playing1 = False
+    cap = cv2.VideoCapture(0)
+    cv2.namedWindow("CamOutput", cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty("CamOutput", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
 
-current_freq2 = C_MAJOR_SCALE[0]
-target_freq2 = C_MAJOR_SCALE[0]
-is_playing2 = False
+    hand_tracker = HandTracker(sound_manager)
+    face_tracker = FaceTracker(sound_manager)
 
-current_lpfreq = 1000
-lpfreq = 1000
-
-s = Server().boot()
-s.start()
-
-fm1 = FM(carrier=current_freq1, ratio=[4, 2, 1, 0.5], index=5, mul=0.5).out()
-fm2 = FM(carrier=current_freq2, ratio=[4, 2, 1, 0.5], index=5, mul=0.5).out()
-
-lp1 = ButLP(fm1, freq=current_lpfreq).out()
-lp2 = ButLP(fm2, freq=current_lpfreq).out()
-
-reverb1 = Freeverb(lp1, size=0.8, damp=0.5, bal=0.5).out()
-reverb2 = Freeverb(lp2, size=0.8, damp=0.5, bal=0.5).out()
-
-def update_frequency():
-    global current_freq1, target_freq1, is_playing1
-    global current_freq2, target_freq2, is_playing2
-    global current_lpfreq, lpfreq
     while True:
-        if is_playing1:
-            current_freq1 = float(target_freq1)
-            fm1.carrier = current_freq1
-            fm1.mul = 0.5
-            fm1.play()
-        else:
-            fm1.stop()
+        ret, img = cap.read()
+        if not ret:
+            break
 
-        if is_playing2:
-            current_freq2 = float(target_freq2)
-            fm2.carrier = current_freq2
-            fm2.mul = 0.5
-            fm2.play()
-        else:
-            fm2.stop()
+        img = cv2.flip(img, 1)
+        h, w, c = img.shape
 
-        current_lpfreq = float(lpfreq)
-        lp1.freq = current_lpfreq
-        lp2.freq = current_lpfreq
+        num_notes = sound_manager.scale.num_notes
+        for i in range(num_notes):
+            y = int(i * h / num_notes)
+            overlay = img.copy()
+            cv2.line(overlay, (0, y), (w, y), (255, 255, 255), 2)
+            alpha = 0.3
+            cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, img)
 
-        time.sleep(0.005) 
+        recHands = hand_tracker.process(img)
+        recFace = face_tracker.process(img)
 
-freq_thread = threading.Thread(target=update_frequency)
-freq_thread.daemon = True
-freq_thread.start()
+        hand_tracker.update_hands(recHands, img, h, w)
+        if args.lip_control:
+            face_tracker.update_face(recFace, img, h, w)
 
-cap = cv2.VideoCapture(0)
-handSolution = mp.solutions.hands
-hands = handSolution.Hands()
+        cv2.imshow("CamOutput", img)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
 
-faceLandmarker = mp.solutions.face_mesh
-face = faceLandmarker.FaceMesh()
+    cap.release()
+    cv2.destroyAllWindows()
+    sound_manager.stop_sound()
 
-def get_closest_scale_freq(center_y):
-    # Map the center_y value to the closest note in the C major scale
-    num_notes = len(C_MAJOR_SCALE)
-    note_index = int(center_y * num_notes)
-    note_index = min(max(note_index, 0), num_notes - 1)
-    return C_MAJOR_SCALE[note_index]
-
-while True:
-    ret, img = cap.read()
-    if not ret:
-        break
-
-    img = cv2.flip(img, 1)
-    h, w, c = img.shape
-
-    # Draw lines for each note
-    num_notes = len(C_MAJOR_SCALE)
-    for i in range(num_notes):
-        y = int(i * h / num_notes)
-        overlay = img.copy()
-        cv2.line(overlay, (0, y), (w, y), (255, 255, 255), 2)
-        alpha = 0.3
-        cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, img)
-            
-    recHands = hands.process(img)
-    recFace = face.process(img)
-    if recHands.multi_hand_landmarks:
-        for i, hand in enumerate(recHands.multi_hand_landmarks):
-            for datapoint_id, point in enumerate(hand.landmark):
-                x, y = int(point.x * w), int(point.y * h)
-                cv2.circle(img, (x, y), 10, (255, 0, 255), cv2.FILLED)
-            
-            thumb = (hand.landmark[THUMB_IDX].x, hand.landmark[THUMB_IDX].y)
-            index = (hand.landmark[INDEX_FINGER_IDX].x, hand.landmark[INDEX_FINGER_IDX].y) 
-            distance = np.linalg.norm(np.array(thumb) - np.array(index))
-
-            is_hand_open = distance > 0.07 
-
-            # Calculate the center of the hand
-            center_y = np.mean([point.y for point in hand.landmark])
-
-            if i == 0:  # First hand
-                target_freq1 = get_closest_scale_freq(center_y)
-                if is_hand_open:
-                    is_playing1 = True
-                    cv2.putText(img, f'Hand 1 Open: {distance:.2f}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                    cv2.putText(img, f'Note: {C_MAJOR_SCALE_DICT["{:.2f}".format(target_freq1)]}', (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                else:
-                    is_playing1 = False
-                    cv2.putText(img, f'Hand 1 Closed: {distance:.2f}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-                    cv2.putText(img, f'Note: {C_MAJOR_SCALE_DICT["{:.2f}".format(target_freq1)]}', (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-            elif i == 1:  # Second hand
-                target_freq2 = get_closest_scale_freq(center_y)
-                if is_hand_open:
-                    is_playing2 = True
-                    cv2.putText(img, f'Hand 2 Open: {distance:.2f}', (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                    cv2.putText(img, f'Note: {C_MAJOR_SCALE_DICT["{:.2f}".format(target_freq2)]}', (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                else:
-                    is_playing2 = False
-                    cv2.putText(img, f'Hand 2 Closed: {distance:.2f}', (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-                    cv2.putText(img, f'Note: {C_MAJOR_SCALE_DICT["{:.2f}".format(target_freq2)]}', (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-        
-        selected_note_index1 = C_MAJOR_SCALE.index(target_freq1)
-        selected_note_index2 = C_MAJOR_SCALE.index(target_freq2)
-        y1 = int(selected_note_index1 * h / num_notes)
-        y2 = int(selected_note_index2 * h / num_notes)
-        overlay = img.copy()
-        cv2.rectangle(overlay, (0, y1), (w, y1 + int(h / num_notes)), (0, 255, 0), -1)
-        cv2.rectangle(overlay, (0, y2), (w, y2 + int(h / num_notes)), (0, 255, 0), -1)
-        alpha = 0.1
-        cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, img)
-
-        if args.lip_control and recFace.multi_face_landmarks:
-            for face_landmark in recFace.multi_face_landmarks:
-                for i, landmark in enumerate(face_landmark.landmark):
-                    x, y = int(landmark.x * w), int(landmark.y * h)
-                    cv2.circle(img, (x, y), 3, (0, 255, 0), cv2.FILLED)
-
-         
-            upper_lip = face_landmark.landmark[13] 
-            lower_lip = face_landmark.landmark[14]
-
-            lip_distance = np.linalg.norm(np.array([upper_lip.x, upper_lip.y]) - np.array([lower_lip.x, lower_lip.y]))
-
-            lpfreq = 0 + lip_distance * 17000 
-            
-            cv2.putText(img, f'Lip Distance: {lip_distance:.2f}', (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            cv2.putText(img, f'LP Freq: {lpfreq:.2f}', (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+if __name__ == "__main__":
+    main()
 
 
-    else:
-        is_playing1 = False
-        is_playing2 = False
-        
-    cv2.imshow("CamOutput", img)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+# import cv2
+# import mediapipe as mp
+# import threading
+# import argparse
+# import tkinter as tk
+# from tkinter import ttk
+# from PIL import Image, ImageTk
+# from hand_tracking import HandTracker
+# from face_tracking import FaceTracker
+# from sound import SoundManager
 
-cap.release()
-cv2.destroyAllWindows()
-s.stop()
+# def setup_tkinter_gui(sound_manager, cap, args):
+#     """Sets up the Tkinter GUI with an embedded OpenCV video feed."""
+#     root = tk.Tk()
+#     root.title("Gesture Instrument Controller")
+
+#     # Function to update the scale
+#     def update_scale(event):
+#         selected_scale = scale_selector.get()
+#         sound_manager.scale.set_scale(selected_scale.lower())  # Update the scale in SoundManager
+#         print(f"Scale changed to: {selected_scale}")
+
+#     # Add a dropdown menu for selecting the scale
+#     scale_label = ttk.Label(root, text="Select Scale:")
+#     scale_label.pack(pady=5)
+
+#     scale_selector = ttk.Combobox(root, values=["Pentatonic", "Diatonic"], state="readonly")
+#     scale_selector.set("Pentatonic")  # Default value
+#     scale_selector.bind("<<ComboboxSelected>>", update_scale)
+#     scale_selector.pack(pady=5)
+
+#     # Create a Canvas for the video feed
+#     video_canvas = tk.Canvas(root, width=640, height=480)
+#     video_canvas.pack()
+
+#     # Function to update the video feed
+#     def update_video():
+#         ret, img = cap.read()
+#         if ret:
+#             img = cv2.flip(img, 1)
+#             h, w, c = img.shape
+
+#             # Process the video frame
+#             num_notes = sound_manager.scale.num_notes
+#             for i in range(num_notes):
+#                 y = int(i * h / num_notes)
+#                 overlay = img.copy()
+#                 cv2.line(overlay, (0, y), (w, y), (255, 255, 255), 2)
+#                 alpha = 0.3
+#                 cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, img)
+
+#             recHands = hand_tracker.process(img)
+#             recFace = face_tracker.process(img)
+
+#             hand_tracker.update_hands(recHands, img, h, w)
+#             if args.lip_control:
+#                 face_tracker.update_face(recFace, img, h, w)
+
+#             # Convert the frame to a format compatible with Tkinter
+#             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+#             img = Image.fromarray(img)
+#             imgtk = ImageTk.PhotoImage(image=img)
+
+#             # Update the Canvas with the new frame
+#             video_canvas.create_image(0, 0, anchor=tk.NW, image=imgtk)
+#             video_canvas.imgtk = imgtk  # Keep a reference to avoid garbage collection
+
+#         # Schedule the next frame update
+#         root.after(10, update_video)
+
+#     # Start the video update loop
+#     update_video()
+
+#     # Run the Tkinter event loop
+#     root.mainloop()
+
+# def main():
+#     parser = argparse.ArgumentParser(description="Gesture-based instrument with optional lip-controlled LowPass filter.")
+#     parser.add_argument('--lip_control', action='store_true', help="Enable lip-controlled LowPass filter")
+#     args = parser.parse_args()
+
+#     sound_manager = SoundManager()
+#     sound_manager.init_sound()
+
+#     freq_thread = threading.Thread(target=sound_manager.update_frequency)
+#     freq_thread.daemon = True
+#     freq_thread.start()
+
+#     cap = cv2.VideoCapture(0)
+
+#     # Initialize trackers
+#     global hand_tracker, face_tracker
+#     hand_tracker = HandTracker(sound_manager)
+#     face_tracker = FaceTracker(sound_manager)
+
+#     # Run the Tkinter GUI with the OpenCV video feed
+#     setup_tkinter_gui(sound_manager, cap, args)
+
+#     # Cleanup
+#     cap.release()
+#     sound_manager.stop_sound()
+
+# if __name__ == "__main__":
+#     main()
