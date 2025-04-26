@@ -10,12 +10,13 @@ class FaceTracker:
     def process(self, img):
         return self.face.process(img)
 
-    def update_face(self, recFace, img, h, w):
+    def update_face(self, recFace, img, h, w, marks):
         if recFace.multi_face_landmarks:
             for face_landmark in recFace.multi_face_landmarks:
-                for i, landmark in enumerate(face_landmark.landmark):
-                    x, y = int(landmark.x * w), int(landmark.y * h)
-                    cv2.circle(img, (x, y), 3, (0, 255, 0), cv2.FILLED)
+                if marks:
+                    for i, landmark in enumerate(face_landmark.landmark):
+                        x, y = int(landmark.x * w), int(landmark.y * h)
+                        cv2.circle(img, (x, y), 3, (0, 255, 0), cv2.FILLED)
 
                 upper_lip = face_landmark.landmark[13]
                 lower_lip = face_landmark.landmark[14]
