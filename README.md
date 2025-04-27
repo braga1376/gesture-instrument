@@ -30,7 +30,16 @@ This project uses a webcam to detect hand gestures and control sound frequencies
     python main.py
     ```
 
-2. The script will open a webcam feed and start detecting hand gestures. The frequency of the sound will change based on the position of your hands, the thumb and index finger determine if the sound is played.
+2. The script will open a webcam feed and display a GUI with the following controls:
+- Sound On/Off: Toggle sound playback.
+- Select Scale: Choose between Pentatonic and Diatonic scales.
+- Marks On/Off: Toggle visual markers for hand tracking.
+- Note Lines On/Off: Toggle horizontal lines representing musical notes.
+- Lip Control On/Off: Toggle lip-controlled LowPass filter.
+start detecting hand gestures. 
+3. Use hand gestures to control the sound:
+- The thumb and index finger determine if the sound is played.
+- The vertical position of the hand determines the frequency of the sound.
 
 ## How It Works
 
@@ -52,17 +61,6 @@ This project uses a webcam to detect hand gestures and control sound frequencies
 - `current_freq2`, `target_freq2`, `is_playing2`: Variables for the second hand's frequency and play state.
 - `current_lpfreq`, `lpfreq`: Variables for the LowPass filter frequency.
 - `get_closest_scale_freq(center_y)`: Maps the vertical position of the hand to the closest note in the C major scale.
-
-### Additional Features
-
-- **Lip-Controlled LowPass Filter**: Optionally control the LowPass filter frequency based on the distance between the upper and lower lips. Enable this feature with the `--lip_control` command-line argument.
-    ```sh
-    python main.py --lip_control
-    ```
-
-### Command-Line Arguments
-
-- `--lip_control`: Enable lip-controlled LowPass filter.
 
 ## Acknowledgements
 

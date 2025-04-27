@@ -1,66 +1,3 @@
-# import cv2
-# import mediapipe as mp
-# import threading
-# import argparse
-# from hand_tracking import HandTracker
-# from face_tracking import FaceTracker
-# from sound import SoundManager
-
-
-# def main():
-#     parser = argparse.ArgumentParser(description="Gesture-based instrument with optional lip-controlled LowPass filter.")
-#     parser.add_argument('--lip_control', action='store_true', help="Enable lip-controlled LowPass filter")
-#     args = parser.parse_args()
-
-#     sound_manager = SoundManager()
-#     sound_manager.init_sound()
-
-#     freq_thread = threading.Thread(target=sound_manager.update_frequency)
-#     freq_thread.daemon = True
-#     freq_thread.start()
-
-#     cap = cv2.VideoCapture(0)
-#     cv2.namedWindow("CamOutput", cv2.WINDOW_NORMAL)
-#     cv2.setWindowProperty("CamOutput", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
-
-#     hand_tracker = HandTracker(sound_manager)
-#     face_tracker = FaceTracker(sound_manager)
-
-#     while True:
-#         ret, img = cap.read()
-#         if not ret:
-#             break
-
-#         img = cv2.flip(img, 1)
-#         h, w, c = img.shape
-
-#         num_notes = sound_manager.scale.num_notes
-#         for i in range(num_notes):
-#             y = int(i * h / num_notes)
-#             overlay = img.copy()
-#             cv2.line(overlay, (0, y), (w, y), (255, 255, 255), 2)
-#             alpha = 0.3
-#             cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, img)
-
-#         recHands = hand_tracker.process(img)
-#         recFace = face_tracker.process(img)
-
-#         hand_tracker.update_hands(recHands, img, h, w)
-#         if args.lip_control:
-#             face_tracker.update_face(recFace, img, h, w)
-
-#         cv2.imshow("CamOutput", img)
-#         if cv2.waitKey(1) & 0xFF == ord('q'):
-#             break
-
-#     cap.release()
-#     cv2.destroyAllWindows()
-#     sound_manager.stop_sound()
-
-# if __name__ == "__main__":
-#     main()
-
-
 import cv2
 import mediapipe as mp
 import threading
@@ -72,14 +9,16 @@ from hand_tracking import HandTracker
 from face_tracking import FaceTracker
 from sound import SoundManager
 
+sound = False
 marks = False
 lines = False
-sound = False
+lip_control = False
 
-def setup_tkinter_gui(sound_manager, cap, args):
+def setup_tkinter_gui(sound_manager, cap):
     global marks
     global lines
     global sound
+    global lip_control
 
     root = tk.Tk()
     root.title("Gesture Instrument Controller")
@@ -99,6 +38,15 @@ def setup_tkinter_gui(sound_manager, cap, args):
     control_frame = tk.Frame(root)
     control_frame.pack(pady=5)
 
+    def toggle_sound():
+        global sound
+        sound = not sound
+        sound_button.config(text=f"Sound: {'ON' if sound else 'OFF'}")
+        print(f"Sound {'enabled' if sound else 'disabled'}")
+
+    sound_button = ttk.Button(control_frame, text="Sound: OFF", command=toggle_sound)
+    sound_button.pack(side=tk.LEFT, padx=5)
+
     scale_label = ttk.Label(control_frame, text="Select Scale:")
     scale_label.pack(side=tk.LEFT, padx=5)
 
@@ -106,14 +54,6 @@ def setup_tkinter_gui(sound_manager, cap, args):
     scale_selector.set("Pentatonic")  # Default value
     scale_selector.bind("<<ComboboxSelected>>", update_scale)
     scale_selector.pack(side=tk.LEFT, padx=5)
-
-    def toggle_lip_control():
-        args.lip_control = not args.lip_control
-        lip_control_button.config(text=f"Lip Control: {'ON' if args.lip_control else 'OFF'}")
-        print(f"Lip Control {'enabled' if args.lip_control else 'disabled'}")
-
-    lip_control_button = ttk.Button(control_frame, text="Lip Control: OFF", command=toggle_lip_control)
-    lip_control_button.pack(side=tk.LEFT, padx=5)
 
     def toggle_marks():
         global marks
@@ -132,6 +72,15 @@ def setup_tkinter_gui(sound_manager, cap, args):
 
     lines_button = ttk.Button(control_frame, text="Note Lines: OFF", command=toggle_lines)
     lines_button.pack(side=tk.LEFT, padx=5)
+
+    def toggle_lip_control():
+        global lip_control
+        lip_control = not lip_control
+        lip_control_button.config(text=f"Lip Control: {'ON' if lip_control else 'OFF'}")
+        print(f"Lip Control {'enabled' if lip_control else 'disabled'}")
+
+    lip_control_button = ttk.Button(control_frame, text="Lip Control: OFF", command=toggle_lip_control)
+    lip_control_button.pack(side=tk.LEFT, padx=5)
 
     video_canvas = tk.Canvas(root, width=video_width, height=video_height)
     video_canvas.pack(fill=tk.BOTH, expand=True)
@@ -154,8 +103,8 @@ def setup_tkinter_gui(sound_manager, cap, args):
             recHands = hand_tracker.process(img)
             recFace = face_tracker.process(img)
 
-            hand_tracker.update_hands(recHands, img, h, w, marks, lines)
-            if args.lip_control:
+            hand_tracker.update_hands(recHands, img, h, w, sound, marks, lines)
+            if lip_control:
                 face_tracker.update_face(recFace, img, h, w, marks)
 
             canvas_width = video_canvas.winfo_width()
@@ -184,10 +133,6 @@ def setup_tkinter_gui(sound_manager, cap, args):
     root.mainloop()
 
 def main():
-    parser = argparse.ArgumentParser(description="Gesture-based instrument with optional lip-controlled LowPass filter.")
-    parser.add_argument('--lip_control', action='store_true', help="Enable lip-controlled LowPass filter")
-    args = parser.parse_args()
-
     sound_manager = SoundManager()
     sound_manager.init_sound()
 
@@ -201,7 +146,7 @@ def main():
     hand_tracker = HandTracker(sound_manager)
     face_tracker = FaceTracker(sound_manager)
 
-    setup_tkinter_gui(sound_manager, cap, args)
+    setup_tkinter_gui(sound_manager, cap)
 
     cap.release()
     sound_manager.stop_sound()

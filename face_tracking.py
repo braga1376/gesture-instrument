@@ -26,5 +26,6 @@ class FaceTracker:
                 lpfreq = lip_distance * 17000
                 self.sound_manager.set_lpfreq(lpfreq)
 
-                cv2.putText(img, f'Lip Distance: {lip_distance:.2f}', (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                cv2.putText(img, f'LP Freq: {lpfreq:.2f}', (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                if marks:
+                    cv2.putText(img, f'Lip Distance: {lip_distance:.2f}', (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    cv2.putText(img, f'LP Freq: {lpfreq:.2f}', (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
