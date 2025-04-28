@@ -82,6 +82,18 @@ def setup_tkinter_gui(sound_manager, cap):
     lip_control_button = ttk.Button(control_frame, text="Lip Control: OFF", command=toggle_lip_control)
     lip_control_button.pack(side=tk.LEFT, padx=5)
 
+    distance_threshold = tk.DoubleVar(value=0.07)
+
+    def update_distance_threshold(val):
+        print(f"Distance Threshold updated to: {float(val)}")
+        distance_threshold.set(float(val))
+
+    distance_slider_label = ttk.Label(control_frame, text="Distance Threshold:")
+    distance_slider_label.pack(side=tk.LEFT, padx=5)
+
+    distance_slider = ttk.Scale(control_frame, from_=0.03, to=0.13, orient="horizontal", command=update_distance_threshold, variable=distance_threshold)
+    distance_slider.pack(side=tk.LEFT, padx=5)
+
     video_canvas = tk.Canvas(root, width=video_width, height=video_height)
     video_canvas.pack(fill=tk.BOTH, expand=True)
 
@@ -103,7 +115,7 @@ def setup_tkinter_gui(sound_manager, cap):
             recHands = hand_tracker.process(img)
             recFace = face_tracker.process(img)
 
-            hand_tracker.update_hands(recHands, img, h, w, sound, marks, lines)
+            hand_tracker.update_hands(recHands, img, h, w, sound, marks, lines, distance_threshold.get())
             if lip_control:
                 face_tracker.update_face(recFace, img, h, w, marks)
 

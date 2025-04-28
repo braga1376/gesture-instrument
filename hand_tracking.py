@@ -13,7 +13,7 @@ class HandTracker:
     def process(self, img):
         return self.hands.process(img)
 
-    def update_hands(self, recHands, img, h, w, sound, marks, lines):
+    def update_hands(self, recHands, img, h, w, sound, marks, lines, distance_threshold):
         num_notes = self.sound_manager.get_num_notes()
 
         if recHands.multi_hand_landmarks:
@@ -33,7 +33,7 @@ class HandTracker:
                 index = (hand.landmark[self.INDEX_FINGER_IDX].x, hand.landmark[self.INDEX_FINGER_IDX].y)
                 distance = np.linalg.norm(np.array(thumb) - np.array(index))
 
-                is_hand_open = distance > 0.07
+                is_hand_open = distance > distance_threshold
 
                 center_y = np.mean([point.y for point in hand.landmark])
 
