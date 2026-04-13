@@ -30,7 +30,7 @@ def setup_tkinter_gui(sound_manager, cap, hand_tracker, face_tracker):
 
     def update_scale(event):
         selected_scale = scale_selector.get()
-        sound_manager.scale.set_scale(selected_scale.lower())
+        sound_manager.set_scale(selected_scale.lower())
         print(f"Scale changed to: {selected_scale}")
 
     control_frame = tk.Frame(root)
@@ -66,7 +66,7 @@ def setup_tkinter_gui(sound_manager, cap, hand_tracker, face_tracker):
         global lines
         lines = not lines
         lines_button.config(text=f"Note Lines: {'ON' if lines else 'OFF'}")
-        print(f"Note Lines {'enabled' if lines else 'disabled'}")
+        print(f"Note Lines {'enabled' if lines else 'disabled'}")  # Fixed: was using 'marks' instead of 'lines'
 
     lines_button = ttk.Button(control_frame, text="Note Lines: OFF", command=toggle_lines)
     lines_button.pack(side=tk.LEFT, padx=5)
@@ -79,6 +79,15 @@ def setup_tkinter_gui(sound_manager, cap, hand_tracker, face_tracker):
 
     lip_control_button = ttk.Button(control_frame, text="Lip Control: OFF", command=toggle_lip_control)
     lip_control_button.pack(side=tk.LEFT, padx=5)
+
+    def toggle_mode():
+        new_mode = "gesture" if sound_manager.mode == "simple" else "simple"
+        sound_manager.set_mode(new_mode)
+        mode_button.config(text=f"Mode: {'Gesture' if new_mode == 'gesture' else 'Simple'}")
+        print(f"Mode changed to: {new_mode}")
+
+    mode_button = ttk.Button(control_frame, text="Mode: Simple", command=toggle_mode)
+    mode_button.pack(side=tk.LEFT, padx=5)
 
     distance_threshold = tk.DoubleVar(value=0.07)
 
@@ -98,6 +107,8 @@ def setup_tkinter_gui(sound_manager, cap, hand_tracker, face_tracker):
     after_id = None
 
     def on_closing():
+        # Cancel any pending video callback, then shut down in the right order:
+        # stop the audio thread first, then the pyo server, then the camera
         if after_id is not None:
             root.after_cancel(after_id)
         sound_manager.set_is_playing1(False)
