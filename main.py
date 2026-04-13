@@ -1,7 +1,5 @@
 import cv2
-import mediapipe as mp
 import threading
-import argparse
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
@@ -14,7 +12,7 @@ marks = False
 lines = False
 lip_control = False
 
-def setup_tkinter_gui(sound_manager, cap):
+def setup_tkinter_gui(sound_manager, cap, hand_tracker, face_tracker):
     global marks
     global lines
     global sound
@@ -68,7 +66,7 @@ def setup_tkinter_gui(sound_manager, cap):
         global lines
         lines = not lines
         lines_button.config(text=f"Note Lines: {'ON' if lines else 'OFF'}")
-        print(f"Note Lines {'enabled' if marks else 'disabled'}")
+        print(f"Note Lines {'enabled' if lines else 'disabled'}")
 
     lines_button = ttk.Button(control_frame, text="Note Lines: OFF", command=toggle_lines)
     lines_button.pack(side=tk.LEFT, padx=5)
@@ -97,20 +95,34 @@ def setup_tkinter_gui(sound_manager, cap):
     video_canvas = tk.Canvas(root, width=video_width, height=video_height)
     video_canvas.pack(fill=tk.BOTH, expand=True)
 
+    after_id = None
+
+    def on_closing():
+        if after_id is not None:
+            root.after_cancel(after_id)
+        sound_manager.set_is_playing1(False)
+        sound_manager.set_is_playing2(False)
+        cap.release()
+        sound_manager.shutdown()
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", on_closing)
+
     def update_video():
+        nonlocal after_id
         ret, img = cap.read()
         if ret:
             img = cv2.flip(img, 1)
             h, w, c = img.shape
 
             if lines:
+                # Draw all note lines onto a single overlay, then blend once
                 num_notes = sound_manager.scale.num_notes
+                overlay = img.copy()
                 for i in range(num_notes):
                     y = int(i * h / num_notes)
-                    overlay = img.copy()
                     cv2.line(overlay, (0, y), (w, y), (255, 255, 255), 2)
-                    alpha = 0.3
-                    cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, img)
+                cv2.addWeighted(overlay, 0.3, img, 0.7, 0, img)
 
             recHands = hand_tracker.process(img)
             recFace = face_tracker.process(img)
@@ -128,7 +140,7 @@ def setup_tkinter_gui(sound_manager, cap):
             else:
                 new_width = canvas_width
                 new_height = int(new_width / video_aspect_ratio)
-            
+
             if canvas_width > 1 and canvas_height > 1:
                 img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_AREA)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -137,9 +149,9 @@ def setup_tkinter_gui(sound_manager, cap):
 
             video_canvas.delete("all")
             video_canvas.create_image(canvas_width // 2, canvas_height // 2, anchor=tk.CENTER, image=imgtk)
-            video_canvas.imgtk = imgtk 
+            video_canvas.imgtk = imgtk
 
-        root.after(10, update_video)
+        after_id = root.after(10, update_video)
 
     update_video()
     root.mainloop()
@@ -154,14 +166,10 @@ def main():
 
     cap = cv2.VideoCapture(0)
 
-    global hand_tracker, face_tracker
     hand_tracker = HandTracker(sound_manager)
     face_tracker = FaceTracker(sound_manager)
 
-    setup_tkinter_gui(sound_manager, cap)
-
-    cap.release()
-    sound_manager.stop_sound()
+    setup_tkinter_gui(sound_manager, cap, hand_tracker, face_tracker)
 
 if __name__ == "__main__":
     main()

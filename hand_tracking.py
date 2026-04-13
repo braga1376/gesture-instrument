@@ -8,10 +8,18 @@ class HandTracker:
 
     def __init__(self, sound_manager):
         self.sound_manager = sound_manager
-        self.hands = mp.solutions.hands.Hands()
+        self.hands = mp.solutions.hands.Hands(
+            static_image_mode=False,
+            max_num_hands=2,
+            model_complexity=1,
+            min_detection_confidence=0.6,
+            min_tracking_confidence=0.5
+        )
 
     def process(self, img):
-        return self.hands.process(img)
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img_rgb.flags.writeable = False
+        return self.hands.process(img_rgb)
 
     def update_hands(self, recHands, img, h, w, sound, marks, lines, distance_threshold):
         num_notes = self.sound_manager.get_num_notes()

@@ -1,3 +1,4 @@
+import time
 import numpy as np
 from pyo import *
 
@@ -60,10 +61,13 @@ class scale:
 
     def get_scale(self):
         return self.scale
+
     def get_scale_dict(self):
         return self.scale_dict
+
     def get_num_notes(self):
         return self.num_notes
+
     def set_scale(self, name):
         self.name = name
         if name == "pentatonic":
@@ -76,6 +80,7 @@ class scale:
             raise ValueError("Scale not recognized. Use 'pentatonic' or 'diatonic'.")
         self.num_notes = len(self.scale)
 
+
 class SoundManager:
     def __init__(self):
         self.scale = scale("pentatonic")
@@ -83,15 +88,16 @@ class SoundManager:
         self.current_freq1 = self.scale.scale[0]
         self.target_freq1 = self.scale.scale[0]
         self.is_playing1 = False
+        self._was_playing1 = False  # tracks previous state to detect transitions
 
         self.current_freq2 = self.scale.scale[0]
         self.target_freq2 = self.scale.scale[0]
         self.is_playing2 = False
+        self._was_playing2 = False  # tracks previous state to detect transitions
 
         self.current_lpfreq = 1000
         self.lpfreq = 1000
-
-        self.num_notes = self.scale.num_notes
+        self._running = False
 
     def init_sound(self):
         self.s = Server(nchnls=2, duplex=0).boot()
@@ -101,51 +107,64 @@ class SoundManager:
         lfo1 = Sine(0.1).range(0.1, 0.75)
         self.synth1 = SuperSaw(freq=self.current_freq1, detune=lfo1, bal=0.7, mul=0.5)
         self.lp1 = ButLP(self.synth1, freq=self.current_lpfreq)
-        self.panned1 = Pan(self.lp1, outs=2, pan=0.5).out()  
+        self.panned1 = Pan(self.lp1, outs=2, pan=0.5).out()
 
         # Synth 2 with stereo panning
         lfo2 = Sine(0.1).range(0.1, 0.75)
         self.synth2 = SuperSaw(freq=self.current_freq2, detune=lfo2, bal=0.7, mul=0.5)
         self.lp2 = ButLP(self.synth2, freq=self.current_lpfreq)
-        self.panned2 = Pan(self.lp2, outs=2, pan=0.5).out() 
+        self.panned2 = Pan(self.lp2, outs=2, pan=0.5).out()
 
         # Reverb and limiter
         self.reverb1 = Freeverb(self.lp1, size=0.6, damp=0.5, bal=0.5)
         self.reverb2 = Freeverb(self.lp2, size=0.6, damp=0.5, bal=0.5)
         self.limiter = Compress(self.panned1 + self.panned2 + self.reverb1 + self.reverb2, thresh=-20, ratio=4).out()
 
+        self.synth1.stop()
+        self.synth2.stop()
+
     def update_frequency(self):
-        while True:
+        self._running = True
+        while self._running:
             if self.is_playing1:
                 self.current_freq1 = float(self.target_freq1)
                 self.synth1.setFreq(self.current_freq1)
-                self.synth1.mul = 0.5
-                self.synth1.play()
+                if not self._was_playing1:
+                    self.synth1.mul = 0.5
+                    self.synth1.play()
+                    self._was_playing1 = True
             else:
-                self.synth1.stop()
+                if self._was_playing1:
+                    self.synth1.stop()
+                    self._was_playing1 = False
 
             if self.is_playing2:
                 self.current_freq2 = float(self.target_freq2)
                 self.synth2.setFreq(self.current_freq2)
-                self.synth2.mul = 0.5
-                self.synth2.play()
+                if not self._was_playing2:
+                    self.synth2.mul = 0.5
+                    self.synth2.play()
+                    self._was_playing2 = True
             else:
-                self.synth2.stop()
+                if self._was_playing2:
+                    self.synth2.stop()
+                    self._was_playing2 = False
 
             self.current_lpfreq = float(self.lpfreq)
-            self.lp1.freq = self.current_lpfreq
-            self.lp2.freq = self.current_lpfreq
+            self.lp1.setFreq(self.current_lpfreq)
+            self.lp2.setFreq(self.current_lpfreq)
 
             time.sleep(0.005)
 
     def get_closest_scale_freq(self, center_y):
-        note_index = int(center_y * self.num_notes)
-        note_index = min(max(note_index, 0), self.num_notes - 1)
+        num_notes = self.scale.num_notes
+        note_index = int(center_y * num_notes)
+        note_index = min(max(note_index, 0), num_notes - 1)
         return self.scale.scale[note_index]
-    
+
     def get_num_notes(self):
-        return self.num_notes
-    
+        return self.scale.num_notes
+
     def get_target_freq1(self):
         return self.target_freq1
 
@@ -166,6 +185,8 @@ class SoundManager:
 
     def set_lpfreq(self, freq):
         self.lpfreq = freq
-    
-    def stop_sound(self):
+
+    def shutdown(self):
+        self._running = False
+        time.sleep(0.02)
         self.s.stop()

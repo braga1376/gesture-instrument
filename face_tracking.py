@@ -8,7 +8,9 @@ class FaceTracker:
         self.face = mp.solutions.face_mesh.FaceMesh()
 
     def process(self, img):
-        return self.face.process(img)
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img_rgb.flags.writeable = False
+        return self.face.process(img_rgb)
 
     def update_face(self, recFace, img, h, w, marks):
         if recFace.multi_face_landmarks:
