@@ -89,6 +89,20 @@ def setup_tkinter_gui(sound_manager, cap, hand_tracker, face_tracker):
     mode_button = ttk.Button(control_frame, text="Mode: Simple", command=toggle_mode)
     mode_button.pack(side=tk.LEFT, padx=5)
 
+    timbre_label = ttk.Label(control_frame, text="Timbre:")
+    timbre_label.pack(side=tk.LEFT, padx=5)
+
+    def update_timbre(event):
+        selected = timbre_selector.get()
+        sound_manager.set_timbre(selected)
+        print(f"Timbre changed to: {selected}")
+
+    timbre_selector = ttk.Combobox(control_frame, values=["Synth", "Pad", "Marimba"],
+                                   state="readonly", width=9)
+    timbre_selector.set("Synth")
+    timbre_selector.bind("<<ComboboxSelected>>", update_timbre)
+    timbre_selector.pack(side=tk.LEFT, padx=5)
+
     distance_threshold = tk.DoubleVar(value=0.07)
 
     def update_distance_threshold(val):

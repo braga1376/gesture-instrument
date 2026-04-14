@@ -20,8 +20,8 @@ class VelocityTracker:
     raw velocity as total displacement divided by window duration.
     An exponential moving average then smooths out frame-to-frame jitter.
     """
-    HISTORY_LEN = 4      # frames of history — shorter catches fast peaks better
-    SMOOTHING   = 0.5    # EMA alpha: higher = more responsive, lower = smoother
+    HISTORY_LEN  = 3      # shorter window catches fast peaks better
+    SMOOTHING    = 0.65   # more responsive to quick changes
 
     def __init__(self):
         self._history = deque(maxlen=self.HISTORY_LEN)
@@ -63,6 +63,8 @@ class VelocityTracker:
 class HandTracker:
     INDEX_FINGER_IDX = 8
     THUMB_IDX        = 4
+    GRACE_FRAMES     = 8  # frames of absence before a voice is deactivated
+                          # (~250ms at 30fps) — prevents restart on brief tracking loss
 
     def __init__(self, sound_manager, model_path='hand_landmarker.task'):
         self.sound_manager = sound_manager
@@ -82,9 +84,11 @@ class HandTracker:
         # One velocity tracker per hand slot
         self.vel_trackers = [VelocityTracker(), VelocityTracker()]
 
-        # Whether each hand was open in the previous frame — used to detect
-        # closed→open (activate) and open→closed (deactivate) transitions
+        # Whether each hand was visible in the previous frame
         self._prev_open = [False, False]
+
+        # Consecutive frames each hand has been absent — used for grace period
+        self._lost_frames = [0, 0]
 
     # ------------------------------------------------------------------
     # MediaPipe processing
@@ -184,18 +188,39 @@ class HandTracker:
                     home_index = self.sound_manager.get_home_index(center_y)
 
                     if sound:
-                        # First appearance: set home note and reset cursor
-                        if not self._prev_open[i]:
+                        # Decide whether this is a genuine fresh start or a
+                        # reappearance within the grace period.
+                        # Grace period: hand was briefly lost but cursor/home
+                        # are preserved — resume without resetting.
+                        # Fresh start: hand was absent long enough to deactivate.
+                        is_fresh = (not self._prev_open[i] and
+                                    self._lost_frames[i] >= self.GRACE_FRAMES)
+                        is_resume = (not self._prev_open[i] and
+                                     self._lost_frames[i] < self.GRACE_FRAMES and
+                                     self._lost_frames[i] > 0)
+
+                        if is_fresh or (not self._prev_open[i] and self._lost_frames[i] == 0):
+                            # Genuine first appearance — set home note and reset cursor
                             if i == 0:
                                 self.sound_manager.activate_gesture1(home_index)
                             else:
                                 self.sound_manager.activate_gesture2(home_index)
+                        elif is_resume:
+                            # Reappeared within grace window — reactivate without
+                            # resetting the cursor so the phrase continues naturally
+                            if i == 0:
+                                self.sound_manager.gesture_voice1.is_active = True
+                            else:
+                                self.sound_manager.gesture_voice2.is_active = True
 
                         # Every frame: push current velocity to the voice
                         if i == 0:
                             self.sound_manager.set_gesture_velocity1(vt.vx, vt.vy, vt.speed)
                         else:
                             self.sound_manager.set_gesture_velocity2(vt.vx, vt.vy, vt.speed)
+
+                    # Hand is visible — reset its lost-frames counter
+                    self._lost_frames[i] = 0
 
                     if marks:
                         cv2.putText(img, f'Hand {i+1}: spd={vt.speed:.3f}',
@@ -206,8 +231,9 @@ class HandTracker:
                     self._prev_open[i] = sound
 
             # ------------------------------------------------------------------
-            # Post-loop: deactivate any hand slot that was active but has now
-            # disappeared (e.g. one hand leaves the frame while two were tracked)
+            # Post-loop: handle any hand slot that was active but is now absent.
+            # In gesture mode, apply grace period before deactivating so brief
+            # tracking losses don't restart the phrase.
             # ------------------------------------------------------------------
             for i in range(2):
                 if i >= n_hands and self._prev_open[i]:
@@ -216,13 +242,17 @@ class HandTracker:
                             self.sound_manager.set_is_playing1(False)
                         else:
                             self.sound_manager.set_is_playing2(False)
+                        self._prev_open[i] = False
                     else:
-                        if i == 0:
-                            self.sound_manager.deactivate_gesture1()
-                        else:
-                            self.sound_manager.deactivate_gesture2()
-                        self.vel_trackers[i].reset()
-                    self._prev_open[i] = False
+                        self._lost_frames[i] += 1
+                        if self._lost_frames[i] >= self.GRACE_FRAMES:
+                            # Grace period exhausted — genuinely deactivate
+                            if i == 0:
+                                self.sound_manager.deactivate_gesture1()
+                            else:
+                                self.sound_manager.deactivate_gesture2()
+                            self.vel_trackers[i].reset()
+                            self._prev_open[i] = False
 
             # ------------------------------------------------------------------
             # Lines overlay — shows the active note band for each hand
@@ -253,16 +283,19 @@ class HandTracker:
                 cv2.addWeighted(overlay, 0.1, img, 0.9, 0, img)
 
         else:
-            # No hands detected — silence everything and reset all trackers
+            # No hands detected at all
             if mode == "simple":
                 self.sound_manager.set_is_playing1(False)
                 self.sound_manager.set_is_playing2(False)
+                self._prev_open = [False, False]
             else:
                 for i in range(2):
                     if self._prev_open[i]:
-                        if i == 0:
-                            self.sound_manager.deactivate_gesture1()
-                        else:
-                            self.sound_manager.deactivate_gesture2()
-                        self.vel_trackers[i].reset()
-                        self._prev_open[i] = False
+                        self._lost_frames[i] += 1
+                        if self._lost_frames[i] >= self.GRACE_FRAMES:
+                            if i == 0:
+                                self.sound_manager.deactivate_gesture1()
+                            else:
+                                self.sound_manager.deactivate_gesture2()
+                            self.vel_trackers[i].reset()
+                            self._prev_open[i] = False
