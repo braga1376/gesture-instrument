@@ -232,27 +232,24 @@ class HandTracker:
 
             # ------------------------------------------------------------------
             # Post-loop: handle any hand slot that was active but is now absent.
-            # In gesture mode, apply grace period before deactivating so brief
-            # tracking losses don't restart the phrase.
             # ------------------------------------------------------------------
             for i in range(2):
-                if i >= n_hands and self._prev_open[i]:
+                if i >= n_hands:
                     if mode == "simple":
                         if i == 0:
                             self.sound_manager.set_is_playing1(False)
                         else:
                             self.sound_manager.set_is_playing2(False)
-                        self._prev_open[i] = False
                     else:
-                        self._lost_frames[i] += 1
-                        if self._lost_frames[i] >= self.GRACE_FRAMES:
-                            # Grace period exhausted — genuinely deactivate
-                            if i == 0:
-                                self.sound_manager.deactivate_gesture1()
-                            else:
-                                self.sound_manager.deactivate_gesture2()
-                            self.vel_trackers[i].reset()
-                            self._prev_open[i] = False
+                        if self._prev_open[i]:
+                            self._lost_frames[i] += 1
+                            if self._lost_frames[i] >= self.GRACE_FRAMES:
+                                if i == 0:
+                                    self.sound_manager.deactivate_gesture1()
+                                else:
+                                    self.sound_manager.deactivate_gesture2()
+                                self.vel_trackers[i].reset()
+                                self._prev_open[i] = False
 
             # ------------------------------------------------------------------
             # Lines overlay — shows the active note band for each hand
